@@ -1,0 +1,14 @@
+{
+  // Cypress-only TypeScript settings. Cypress declares globals (cy, describe, it,
+  // chai's expect); keeping them in this folder's config stops them leaking into
+  // the Playwright files, which import expect explicitly.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "types": ["cypress", "@testing-library/cypress", "node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["**/*.ts"]
+}

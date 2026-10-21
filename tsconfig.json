@@ -1,0 +1,14 @@
+{
+  // Playwright side of the repo. Cypress has its own settings in cypress/tsconfig.json.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["playwright.config.ts", "cypress.config.ts", "pages", "fixtures", "tests", "shared"],
+  "exclude": ["cypress", "node_modules"]
+}
