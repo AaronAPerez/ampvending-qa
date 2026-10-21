@@ -56,6 +56,7 @@ Automated scans catch only part of all accessibility issues, so the manual keybo
 - **Network safety guard.** Every POST is blocked by default (`fixtures/index.ts`), and form submissions are stubbed. The suite runs against production, so it must never send a real lead.
 - **Traceability.** Every automated test title begins with its test case ID from this plan.
 - **Known bugs as expected failures.** Tests for confirmed defects use Playwright's `test.fail()`, so the suite stays green while the bug is open and flags the test the moment the fix ships.
+- **Accessibility baseline.** The axe test tolerates exactly the logged violations (rule + element), fails on any new one, and flags a logged one once it's fixed.
 - **Two frameworks, one source of truth.** TC-CF-001, 003 and 005 also run in Cypress (`cypress/`). Both suites read the same labels, endpoint and test data from `shared/contact.ts`, so they can't drift apart.
 
 ## 4. Test environments
@@ -129,10 +130,11 @@ Full steps for each case live in `TEST_CASES.md`.
 | TC-NAV-002 | Navigation | Mobile menu opens, closes, and works with the keyboard, including Escape | P2 | Manual |
 | TC-NAV-003 | Navigation | Click-to-call link uses `tel:` with the correct number | P1 | Manual |
 | TC-RWD-001 | Responsive | No horizontal scrolling at 320, 375, 768, and 1280 px | P2 | Manual |
-| TC-A11Y-001 | Accessibility | axe scan finds no WCAG 2.1 A/AA violations | P1 | Automated `@smoke` |
+| TC-A11Y-001 | Accessibility | axe scan finds no WCAG 2.1 A/AA violations beyond the logged ones (BUG-005, BUG-006) | P1 | Automated `@smoke` |
 | TC-A11Y-002 | Accessibility | The form can be completed by keyboard alone, with focus always visible | P1 | Manual |
 | TC-A11Y-003 | Accessibility | NVDA announces each label, error, and success message | P2 | Manual |
 | TC-A11Y-004 | Accessibility | A failed submit moves focus to the first invalid field | P1 | Automated; **known bug** (`test.fail`) |
+| TC-GEN-001 | General | Contact page loads without React hydration errors | P2 | Automated `@smoke` |
 | TC-SEO-001 | Metadata | Every page has a unique title and meta description | P3 | Manual |
 
 ## 10. Deliverables
