@@ -3,12 +3,12 @@
 | Field | Value |
 |---|---|
 | System under test | AMP Vending Machines marketing site |
-| URL | https://ampvendingmachines.com 
+| URL | https://www.ampvendingmachines.com |
 | Author | Aaron Perez |
 | Version | 0.1 (draft) |
 | Last updated | October 2026 |
 
-> Items marked `TODO(verify)` are assumptions to confirm against the live site before execution.
+> Labels, endpoint and validation rules were verified against the site source (`components/contact/ContactForm.tsx`, `app/api/contact/route.ts`) on 2026-10-21.
 
 ---
 
@@ -55,6 +55,7 @@ Automated scans catch only part of all accessibility issues, so the manual keybo
 - **Role- and label-based locators.** They are resilient to styling changes and double as an accessibility check.
 - **Network safety guard.** Every POST is blocked by default (`fixtures/index.ts`), and form submissions are stubbed. The suite runs against production, so it must never send a real lead.
 - **Traceability.** Every automated test title begins with its test case ID from this plan.
+- **Known bugs as expected failures.** Tests for confirmed defects use Playwright's `test.fail()`, so the suite stays green while the bug is open and flags the test the moment the fix ships.
 - **Two frameworks, one source of truth.** TC-CF-001, 003 and 005 also run in Cypress (`cypress/`). Both suites read the same labels, endpoint and test data from `shared/contact.ts`, so they can't drift apart.
 
 ## 4. Test environments
@@ -115,13 +116,15 @@ Full steps for each case live in `TEST_CASES.md`.
 | ID | Area | Title | Priority | Status |
 |---|---|---|---|---|
 | TC-CF-001 | Contact form | Valid submission shows confirmation and sends the lead | P1 | Automated `@smoke` (Playwright + Cypress) |
-| TC-CF-002 | Contact form | Empty form is blocked and focus moves to the first required field | P1 | Automated |
-| TC-CF-003 | Contact form | Invalid email formats are rejected | P1 | Automated, data-driven (Playwright + Cypress) |
-| TC-CF-004 | Contact form | Message length boundaries: min-1, min, max, max+1 | P2 | Manual (blocked: limits unknown) |
+| TC-CF-002 | Contact form | Empty form is blocked and the required fields show errors | P1 | Automated |
+| TC-CF-003 | Contact form | Invalid email formats are rejected (6 cases) | P1 | Automated, data-driven (Playwright + Cypress) |
+| TC-CF-004 | Contact form | Message length boundaries: 9, 10, 1000, 1001 characters | P1 | Automated; 9 and 1001 are **known bugs** (`test.fail`) |
 | TC-CF-005 | Contact form | Server error shows a message and keeps the typed input | P1 | Automated (Playwright + Cypress) |
 | TC-CF-006 | Contact form | Double-clicking submit sends only one request | P2 | Manual (next to automate) |
 | TC-CF-007 | Contact form | Phone field accepts common US formats | P3 | Manual |
 | TC-CF-008 | Contact form | A name made only of spaces is rejected | P2 | Manual |
+| TC-CF-009 | Contact form | A server validation error (400) shows the server's message | P2 | Automated; **known bug** (`test.fail`) |
+| TC-CF-010 | Contact form | An empty message shows a field error and nothing is sent | P1 | Automated; **known bug** (`test.fail`) |
 | TC-NAV-001 | Navigation | Every header and footer link loads without a 404 | P1 | Manual (next to automate) |
 | TC-NAV-002 | Navigation | Mobile menu opens, closes, and works with the keyboard, including Escape | P2 | Manual |
 | TC-NAV-003 | Navigation | Click-to-call link uses `tel:` with the correct number | P1 | Manual |
@@ -129,6 +132,7 @@ Full steps for each case live in `TEST_CASES.md`.
 | TC-A11Y-001 | Accessibility | axe scan finds no WCAG 2.1 A/AA violations | P1 | Automated `@smoke` |
 | TC-A11Y-002 | Accessibility | The form can be completed by keyboard alone, with focus always visible | P1 | Manual |
 | TC-A11Y-003 | Accessibility | NVDA announces each label, error, and success message | P2 | Manual |
+| TC-A11Y-004 | Accessibility | A failed submit moves focus to the first invalid field | P1 | Automated; **known bug** (`test.fail`) |
 | TC-SEO-001 | Metadata | Every page has a unique title and meta description | P3 | Manual |
 
 ## 10. Deliverables
@@ -142,8 +146,8 @@ Full steps for each case live in `TEST_CASES.md`.
 
 ## 11. Open questions
 
-1. What are the minimum and maximum lengths for the message field? This blocks TC-CF-004.
-2. Should the email field accept addresses without a dot in the domain, such as `user@localhost`? Native browser validation allows them.
+1. ~~Message length limits?~~ **Answered:** the server requires 10-1000 characters, but the form only checks "not empty". Logged as a defect (TC-CF-004).
+2. ~~Does `user@localhost` count as valid?~~ **Answered:** both the form and the server reject it; it's now one of the TC-CF-003 cases.
 3. Does the form have spam protection (a honeypot, CAPTCHA, or rate limiting)? This affects how automation can submit it.
 4. Is there a Vercel preview URL where real submissions are safe to send?
 5. Which inbox receives submissions? This is needed for one manual end-to-end delivery check.

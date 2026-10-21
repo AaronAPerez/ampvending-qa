@@ -9,14 +9,17 @@
  *   `await` with `cy.*` calls.
  * - Elements are getter METHODS, not stored fields. Each call re-queries the DOM,
  *   which avoids holding stale elements after React re-renders.
- * - Testing Library matches label strings exactly by default, which is what the
- *   Playwright version gets from `exact: true`.
+ * - Banners are found with cy.contains('[role="alert"]', text): several elements
+ *   share role="alert", so text is what tells them apart. Field errors are found by
+ *   text alone.
  */
 import {
   CONTACT_LABELS,
   CONTACT_PATH,
   CONTACT_SUBMIT_ENDPOINT,
+  ERROR_TEXT,
   SUBMIT_BUTTON_NAME,
+  SUCCESS_TEXT,
   type ContactFormData,
   type StubOptions,
 } from '../../shared/contact';
@@ -35,16 +38,20 @@ export class ContactPage {
   static readonly submitRequest = `@${ContactPage.alias}` as const;
 
   // ---------------------------------------------------------------------------
-  // Locators: every query is scoped to <main>, which keeps the hidden Next.js
-  // route announcer (role="alert", rendered outside <main>) out of role queries.
+  // Locators: every query is scoped to <main>, which keeps toast notifications
+  // (rendered outside <main>, repeating the banner text) out of the results.
   // ---------------------------------------------------------------------------
 
   main(): ElementChain {
     return cy.findByRole('main');
   }
 
-  nameInput(): ElementChain {
-    return this.main().findByLabelText(CONTACT_LABELS.name);
+  firstNameInput(): ElementChain {
+    return this.main().findByLabelText(CONTACT_LABELS.firstName);
+  }
+
+  lastNameInput(): ElementChain {
+    return this.main().findByLabelText(CONTACT_LABELS.lastName);
   }
 
   emailInput(): ElementChain {
@@ -55,6 +62,10 @@ export class ContactPage {
     return this.main().findByLabelText(CONTACT_LABELS.phone);
   }
 
+  companyNameInput(): ElementChain {
+    return this.main().findByLabelText(CONTACT_LABELS.companyName);
+  }
+
   messageInput(): ElementChain {
     return this.main().findByLabelText(CONTACT_LABELS.message);
   }
@@ -63,14 +74,22 @@ export class ContactPage {
     return this.main().findByRole('button', { name: SUBMIT_BUTTON_NAME });
   }
 
-  /** Success confirmation. Expected to be a live region (role="status"). */
+  /** Success banner (role="alert", matched by its text). */
   successMessage(): ElementChain {
-    return this.main().findByRole('status');
+    return this.main().contains('[role="alert"]', SUCCESS_TEXT);
   }
 
-  /** Error message. Expected role="alert" so screen readers announce it immediately. */
+  /** Error banner (role="alert", matched by its text). */
   errorMessage(): ElementChain {
-    return this.main().findByRole('alert');
+    return this.main().contains('[role="alert"]', ERROR_TEXT);
+  }
+
+  /**
+   * A field-level error, found by its text inside <main>. Deliberately NOT by role,
+   * so it keeps working if the site drops role="alert" from field errors.
+   */
+  fieldError(text: string | RegExp): ElementChain {
+    return this.main().contains(text);
   }
 
   // ---------------------------------------------------------------------------
@@ -84,9 +103,11 @@ export class ContactPage {
 
   /** Fill only the fields provided. Skipped fields stay empty (used by required-field tests). */
   fillForm(data: ContactFormData): void {
-    if (data.name !== undefined) this.typeInto(this.nameInput(), data.name);
+    if (data.firstName !== undefined) this.typeInto(this.firstNameInput(), data.firstName);
+    if (data.lastName !== undefined) this.typeInto(this.lastNameInput(), data.lastName);
     if (data.email !== undefined) this.typeInto(this.emailInput(), data.email);
     if (data.phone !== undefined) this.typeInto(this.phoneInput(), data.phone);
+    if (data.companyName !== undefined) this.typeInto(this.companyNameInput(), data.companyName);
     if (data.message !== undefined) this.typeInto(this.messageInput(), data.message);
   }
 
@@ -110,11 +131,15 @@ export class ContactPage {
    * The real backend (and Resend) never sees it, so no email reaches the business.
    * Registered after the global guard in support/e2e.ts, so it takes precedence.
    */
-  stubSubmission({ status = 200 }: StubOptions = {}): void {
-    cy.intercept('POST', CONTACT_SUBMIT_ENDPOINT, {
-      statusCode: status,
-      body: status < 400 ? { success: true } : { error: 'Stubbed server error' },
-    }).as(ContactPage.alias);
+  stubSubmission({ status = 200, body }: StubOptions = {}): void {
+    const responseBody =
+      body ?? (status < 400
+        ? { success: true, message: 'Thank you for your message!' }
+        : { success: false, message: 'Stubbed server error' });
+
+    cy.intercept('POST', CONTACT_SUBMIT_ENDPOINT, { statusCode: status, body: responseBody }).as(
+      ContactPage.alias,
+    );
   }
 
   /** Wait for the stubbed submission. Yields the interception (request + response). */

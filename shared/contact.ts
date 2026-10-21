@@ -3,66 +3,105 @@
  *   - Playwright: pages/ContactPage.ts, tests/contact.spec.ts
  *   - Cypress:    cypress/pages/ContactPage.ts, cypress/e2e/contact.cy.ts
  *
- * One source of truth: when a label, path or data value changes, edit it here
- * and both suites follow. Keep this file framework-free (no Playwright or Cypress
- * imports) so either runner can load it.
+ * One source of truth: when a label, path or rule changes, edit it here and both
+ * suites follow. Keep this file framework-free (no Playwright or Cypress imports).
  *
- * TODO(verify): every value marked below is a placeholder. Confirm each one against
- * the live site in DevTools (Elements tab for labels, Network tab for the endpoint).
+ * VERIFIED against the site source on 2026-10-21:
+ *   - components/contact/ContactForm.tsx  (labels, button, banners, client validation)
+ *   - app/api/contact/route.ts            (endpoint, server-side zod rules)
  */
 
 /** Data a test can type into the form. All optional so negative tests can leave fields empty. */
 export interface ContactFormData {
-  name?: string;
+  firstName?: string;
+  lastName?: string;
   email?: string;
   phone?: string;
+  companyName?: string;
   message?: string;
 }
 
 /** Options for faking the server's reply to a form submission. */
 export interface StubOptions {
-  /** HTTP status to return. Use 500 to exercise the error path. Default: 200. */
+  /** HTTP status to return. Default: 200. */
   status?: number;
+  /** Response body. Defaults to a success body for < 400, a generic error body otherwise. */
+  body?: unknown;
 }
 
 /** Path of the contact page, resolved against each runner's base URL. */
-export const CONTACT_PATH = '/contact'; // TODO(verify)
+export const CONTACT_PATH = '/contact';
+
+/** The form POSTs JSON here. Glob works in both page.route() and cy.intercept(). */
+export const CONTACT_SUBMIT_ENDPOINT = '**/api/contact';
 
 /**
- * Glob for the request the form sends on submit. Works in both page.route() and cy.intercept().
- * Find it: run the site locally, open DevTools → Network, submit once, copy the URL.
- * If the form uses a Next.js Server Action, there is no /api route; the POST goes to the
- * page URL itself. Both suites' POST guards still block it, so nothing is sent, but the
- * success test will fail until this pattern matches.
+ * Visible label text. Each label ends with " *" (required) or " (Optional)",
+ * so match the start only. Anchored regexes also work in Testing Library.
  */
-export const CONTACT_SUBMIT_ENDPOINT = '**/api/contact'; // TODO(verify)
-
-/** Visible label text for each field. Matched exactly, so "Name" won't match "Business Name". */
 export const CONTACT_LABELS = {
-  name: 'Name', // TODO(verify)
-  email: 'Email', // TODO(verify)
-  phone: 'Phone', // TODO(verify)
-  message: 'Message', // TODO(verify)
+  firstName: /^First Name/,
+  lastName: /^Last Name/,
+  email: /^Email Address/,
+  phone: /^Phone Number/,
+  companyName: /^Company Name/,
+  message: /^Message/,
 } as const;
 
-/** Accessible name of the submit button. */
-export const SUBMIT_BUTTON_NAME = /send|submit/i; // TODO(verify)
+/** Accessible name of the submit button. It reads "Sending..." while submitting. */
+export const SUBMIT_BUTTON_NAME = /Request Information/i;
 
 /**
- * Valid baseline data. example.com is reserved for testing (RFC 2606) and
+ * Result banners. Field-level errors ALSO use role="alert", so tests must match
+ * these banners by text, not by role alone.
+ */
+export const SUCCESS_TEXT = /sent successfully/i;
+export const ERROR_TEXT = /error sending your message/i;
+
+/** Field error messages from the form's own (client-side) validation. */
+export const FIELD_ERRORS = {
+  firstName: 'First name is required',
+  lastName: 'Last name is required',
+  email: 'Email is required',
+  invalidEmail: 'Invalid email address',
+  companyName: 'Company name is required',
+  message: 'Message is required',
+} as const;
+
+/**
+ * Server-side rules (zod in app/api/contact/route.ts). The client only checks that
+ * the message isn't empty, so these limits are where client and server disagree.
+ */
+export const SERVER_RULES = {
+  messageMin: 10,
+  messageMax: 1000,
+  nameMax: 50,
+  companyMax: 100,
+} as const;
+
+/** The exact 400 body the API returns when zod validation fails. */
+export const SERVER_VALIDATION_ERROR_BODY = {
+  success: false,
+  message: 'Please check your form data.',
+  errors: [{ field: 'message', message: 'Message must be at least 10 characters' }],
+} as const;
+
+/**
+ * Valid baseline lead. example.com is reserved for testing (RFC 2606) and
  * 555-0100 is a reserved fictional number. Never use real contact details.
  */
 export const VALID_LEAD = {
-  name: 'QA Test User',
+  firstName: 'QA',
+  lastName: 'Tester',
   email: 'qa.test@example.com',
   phone: '209-555-0100',
+  companyName: 'QA Test Co',
   message: 'Automated test submission. Please ignore.',
 } satisfies ContactFormData;
 
 /**
- * Clearly invalid formats only. Ambiguous cases like "user@localhost" are
- * accepted by native browser validation; they're logged as an open question
- * in TEST_PLAN.md instead of being asserted here.
+ * Formats the client's regex (/^[^\s@]+@[^\s@]+\.[^\s@]+$/) rejects.
+ * "user@localhost" is rejected by both client and server, so it's included now.
  */
 export const INVALID_EMAILS = [
   'plainaddress',
@@ -70,4 +109,10 @@ export const INVALID_EMAILS = [
   '@missing-local.com',
   'two@@example.com',
   'has space@example.com',
+  'user@localhost',
 ] as const;
+
+/** A message of exactly `length` characters, for boundary tests. */
+export function messageOfLength(length: number): string {
+  return 'a'.repeat(length);
+}

@@ -5,11 +5,35 @@
  * - @smoke marks the fast must-pass subset: npx playwright test --grep "@smoke"
  * - Every submission is stubbed or blocked (see fixtures/index.ts), so the live
  *   site never sends a real email.
+ *
+ * KNOWN BUGS
+ * Tests that document a confirmed defect use test.fail(). They stay green while the
+ * bug exists and turn red ("unexpectedly passed") once it's fixed, which is the cue
+ * to delete the test.fail() line. Replace each description with its GitHub issue number.
  */
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from '../fixtures';
-// Test data is shared with the Cypress suite, so both frameworks test identical inputs.
-import { INVALID_EMAILS, VALID_LEAD } from '../shared/contact';
+import {
+  FIELD_ERRORS,
+  INVALID_EMAILS,
+  SERVER_VALIDATION_ERROR_BODY,
+  VALID_LEAD,
+  messageOfLength,
+} from '../shared/contact';
+
+/** Confirmed defects in the site, referenced by the test.fail() calls below. */
+const KNOWN_BUGS = {
+  focus: 'Site bug: focus is not moved to the first invalid field (WCAG 3.3.1 / 2.4.3)',
+  messageErrorHidden:
+    'Site bug: the form sets a "Message is required" error but never renders it under the field',
+  messageLength:
+    'Site bug: client only checks "not empty"; server requires 10-1000 characters, ' +
+    'so the visitor gets a generic error instead of a field message',
+  serverErrors: "Site bug: the client discards the server's validation message and shows a generic error",
+} as const;
+
+/** Short timeout for assertions that are expected to fail, so known bugs don't slow the run. */
+const EXPECTED_FAIL_TIMEOUT = { timeout: 2_000 };
 
 test.describe('Contact form', () => {
   test.beforeEach(async ({ contactPage }) => {
@@ -25,22 +49,53 @@ test.describe('Contact form', () => {
 
     await expect(contactPage.successMessage).toBeVisible();
     expect(requests).toHaveLength(1);
-    // Payload shape depends on the app; this checks the email arrived unaltered.
-    expect(JSON.stringify(requests[0])).toContain(VALID_LEAD.email);
+    // The lead must reach the API intact: check the fields the business needs to reply.
+    expect(requests[0]).toMatchObject({
+      email: VALID_LEAD.email,
+      companyName: VALID_LEAD.companyName,
+      message: VALID_LEAD.message,
+    });
   });
 
-  test('TC-CF-002 empty form is blocked and focus moves to the first required field', async ({
+  test('TC-CF-002 empty form is blocked and the required fields show errors', async ({
     contactPage,
   }) => {
     const requests = await contactPage.stubSubmission();
 
     await contactPage.submit();
 
-    // Focus on the first invalid field is both the browser's native behavior and an
-    // accessibility best practice. It's also a reliable signal validation has run,
-    // which avoids checking "nothing was sent" before a request could even start.
-    await expect(contactPage.nameInput).toBeFocused(); // TODO(verify): first required field
+    // The message error is checked separately in TC-CF-010 (known bug: never rendered).
+    for (const message of [
+      FIELD_ERRORS.firstName,
+      FIELD_ERRORS.lastName,
+      FIELD_ERRORS.email,
+      FIELD_ERRORS.companyName,
+    ]) {
+      await expect(contactPage.fieldError(message)).toBeVisible();
+    }
     expect(requests).toHaveLength(0);
+  });
+
+  test('TC-CF-010 an empty message shows a field error and nothing is sent', async ({
+    contactPage,
+  }) => {
+    test.fail(true, KNOWN_BUGS.messageErrorHidden);
+    const requests = await contactPage.stubSubmission();
+
+    await contactPage.submitForm({ ...VALID_LEAD, message: '' });
+
+    expect(requests).toHaveLength(0); // passes today: the form does block the submit
+    await expect(contactPage.fieldError(FIELD_ERRORS.message)).toBeVisible(EXPECTED_FAIL_TIMEOUT);
+  });
+
+  test('TC-A11Y-004 failed submit moves focus to the first invalid field', async ({
+    contactPage,
+  }) => {
+    test.fail(true, KNOWN_BUGS.focus);
+
+    await contactPage.submit();
+
+    await expect(contactPage.firstNameInput).toBeFocused(EXPECTED_FAIL_TIMEOUT);
   });
 
   // Data-driven: one test per invalid email, so the report shows exactly which one failed.
@@ -50,8 +105,41 @@ test.describe('Contact form', () => {
 
       await contactPage.submitForm({ ...VALID_LEAD, email });
 
-      await expect(contactPage.emailInput).toBeFocused();
+      await expect(contactPage.fieldError(FIELD_ERRORS.invalidEmail)).toBeVisible();
       expect(requests).toHaveLength(0);
+    });
+  }
+
+  /**
+   * Boundary value analysis on the message length the SERVER enforces (10-1000).
+   * Lengths just outside the range should be stopped by the form before any request
+   * is sent. Today they aren't (see KNOWN_BUGS.messageLength).
+   */
+  // expectedError: the server's own wording, which the form should show once it shares the schema.
+  const messageBoundaries = [
+    { length: 9, accepted: false, expectedError: /at least 10 characters/i },
+    { length: 10, accepted: true, expectedError: null },
+    { length: 1000, accepted: true, expectedError: null },
+    { length: 1001, accepted: false, expectedError: /less than 1,?000 characters/i },
+  ];
+
+  for (const { length, accepted, expectedError } of messageBoundaries) {
+    test(`TC-CF-004 message of ${length} characters is ${accepted ? 'accepted' : 'rejected before sending'}`, async ({
+      contactPage,
+    }) => {
+      if (!accepted) test.fail(true, KNOWN_BUGS.messageLength);
+      const requests = await contactPage.stubSubmission();
+
+      await contactPage.submitForm({ ...VALID_LEAD, message: messageOfLength(length) });
+
+      if (accepted) {
+        await expect(contactPage.successMessage).toBeVisible();
+        expect(requests).toHaveLength(1);
+      } else {
+        // Expected: a message-specific error and no request at all.
+        await expect(contactPage.fieldError(expectedError!)).toBeVisible(EXPECTED_FAIL_TIMEOUT);
+        expect(requests).toHaveLength(0);
+      }
     });
   }
 
@@ -66,6 +154,20 @@ test.describe('Contact form', () => {
     await expect(contactPage.successMessage).toBeHidden();
     // Wiping the visitor's message on failure loses the lead. Treat it as a real bug.
     await expect(contactPage.messageInput).toHaveValue(VALID_LEAD.message);
+  });
+
+  test("TC-CF-009 server validation error (400) shows the server's message", async ({
+    contactPage,
+  }) => {
+    test.fail(true, KNOWN_BUGS.serverErrors);
+    // Reproduce the API's real 400 response so the UI's handling can be checked safely.
+    await contactPage.stubSubmission({ status: 400, body: SERVER_VALIDATION_ERROR_BODY });
+
+    await contactPage.submitForm(VALID_LEAD);
+
+    await expect(
+      contactPage.main.getByText(/at least 10 characters|check your form data/i),
+    ).toBeVisible(EXPECTED_FAIL_TIMEOUT);
   });
 
   test('TC-A11Y-001 no WCAG 2.1 A/AA violations detected by axe @smoke', async ({

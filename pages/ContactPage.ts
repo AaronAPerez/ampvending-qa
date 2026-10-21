@@ -12,19 +12,21 @@
  * probably broke too. Avoid CSS classes: Tailwind class names change constantly.
  *
  * SCOPING TO <main>
- * Next.js injects a hidden route announcer with role="alert" outside <main>.
- * Scoping every locator to <main> keeps getByRole('alert') from matching it.
+ * The site's toast notifications (sonner) repeat the banner text outside <main>,
+ * and Next.js adds a hidden route announcer there too. Scoping to <main> keeps
+ * both out of every query.
  *
- * SHARED CONSTANTS
- * The path, labels, button name, endpoint and test data live in shared/contact.ts,
- * which the Cypress suite uses too. Verify the TODO placeholders there.
+ * Labels, button name, banner text and rules live in shared/contact.ts
+ * (shared with the Cypress suite).
  */
 import type { Locator, Page } from '@playwright/test';
 import {
   CONTACT_LABELS,
   CONTACT_PATH,
   CONTACT_SUBMIT_ENDPOINT,
+  ERROR_TEXT,
   SUBMIT_BUTTON_NAME,
+  SUCCESS_TEXT,
   type ContactFormData,
   type StubOptions,
 } from '../shared/contact';
@@ -33,41 +35,50 @@ export class ContactPage {
   /** Path of the contact page, resolved against `baseURL` in playwright.config.ts. */
   static readonly path = CONTACT_PATH;
 
-  /** Glob for the submit request. See shared/contact.ts for how to find the real one. */
+  /** Glob for the submit request. */
   static readonly submitEndpoint = CONTACT_SUBMIT_ENDPOINT;
 
   /** Landmark that every other locator is scoped to (see SCOPING note above). */
   readonly main: Locator;
 
-  // Form fields. `exact: true` stops "Name" from also matching "Business Name".
-  readonly nameInput: Locator;
+  // Form fields
+  readonly firstNameInput: Locator;
+  readonly lastNameInput: Locator;
   readonly emailInput: Locator;
   readonly phoneInput: Locator;
+  readonly companyNameInput: Locator;
   readonly messageInput: Locator;
   readonly submitButton: Locator;
 
   /**
-   * Success confirmation. Expected to be a live region (role="status") so screen
-   * readers announce it. If the site shows plain text instead, that's a real
-   * accessibility bug: log it, then switch this to getByText() temporarily.
-   * If success shows as a toast rendered outside <main>, use this.page instead.
+   * Result banners. Field errors also use role="alert", so the banners are
+   * filtered by their text rather than found by role alone.
    */
   readonly successMessage: Locator;
-
-  /** Error message. Expected role="alert" so screen readers announce it immediately. */
   readonly errorMessage: Locator;
 
   constructor(private readonly page: Page) {
     this.main = page.getByRole('main');
 
-    this.nameInput = this.main.getByLabel(CONTACT_LABELS.name, { exact: true });
-    this.emailInput = this.main.getByLabel(CONTACT_LABELS.email, { exact: true });
-    this.phoneInput = this.main.getByLabel(CONTACT_LABELS.phone, { exact: true });
-    this.messageInput = this.main.getByLabel(CONTACT_LABELS.message, { exact: true });
+    this.firstNameInput = this.main.getByLabel(CONTACT_LABELS.firstName);
+    this.lastNameInput = this.main.getByLabel(CONTACT_LABELS.lastName);
+    this.emailInput = this.main.getByLabel(CONTACT_LABELS.email);
+    this.phoneInput = this.main.getByLabel(CONTACT_LABELS.phone);
+    this.companyNameInput = this.main.getByLabel(CONTACT_LABELS.companyName);
+    this.messageInput = this.main.getByLabel(CONTACT_LABELS.message);
     this.submitButton = this.main.getByRole('button', { name: SUBMIT_BUTTON_NAME });
 
-    this.successMessage = this.main.getByRole('status');
-    this.errorMessage = this.main.getByRole('alert');
+    this.successMessage = this.main.getByRole('alert').filter({ hasText: SUCCESS_TEXT });
+    this.errorMessage = this.main.getByRole('alert').filter({ hasText: ERROR_TEXT });
+  }
+
+  /**
+   * A field-level error, found by its text inside <main>. Deliberately NOT by role:
+   * the site may drop role="alert" from field errors (they should be announced via
+   * focus + aria-describedby instead), and this locator keeps working either way.
+   */
+  fieldError(text: string | RegExp): Locator {
+    return this.main.getByText(text);
   }
 
   /** Open the contact page. */
@@ -77,9 +88,11 @@ export class ContactPage {
 
   /** Fill only the fields provided. Skipped fields stay empty (used by required-field tests). */
   async fillForm(data: ContactFormData): Promise<void> {
-    if (data.name !== undefined) await this.nameInput.fill(data.name);
+    if (data.firstName !== undefined) await this.firstNameInput.fill(data.firstName);
+    if (data.lastName !== undefined) await this.lastNameInput.fill(data.lastName);
     if (data.email !== undefined) await this.emailInput.fill(data.email);
     if (data.phone !== undefined) await this.phoneInput.fill(data.phone);
+    if (data.companyName !== undefined) await this.companyNameInput.fill(data.companyName);
     if (data.message !== undefined) await this.messageInput.fill(data.message);
   }
 
@@ -101,8 +114,12 @@ export class ContactPage {
    * Returns a live array of captured request bodies. It fills as requests arrive,
    * so tests can assert on what the form actually sent (and how many times).
    */
-  async stubSubmission({ status = 200 }: StubOptions = {}): Promise<unknown[]> {
+  async stubSubmission({ status = 200, body }: StubOptions = {}): Promise<unknown[]> {
     const captured: unknown[] = [];
+    const responseBody =
+      body ?? (status < 400
+        ? { success: true, message: 'Thank you for your message!' }
+        : { success: false, message: 'Stubbed server error' });
 
     await this.page.route(ContactPage.submitEndpoint, async (route) => {
       const request = route.request();
@@ -110,19 +127,14 @@ export class ContactPage {
       // Only fake the submission itself; let anything else on this URL pass to the guard.
       if (request.method() !== 'POST') return route.fallback();
 
-      // postDataJSON() parses JSON and url-encoded bodies but throws on multipart,
-      // so fall back to the raw string rather than crashing the test.
+      // The form sends JSON; fall back to the raw string if a body ever isn't JSON.
       try {
         captured.push(request.postDataJSON());
       } catch {
         captured.push(request.postData());
       }
 
-      await route.fulfill({
-        status,
-        contentType: 'application/json',
-        body: JSON.stringify(status < 400 ? { success: true } : { error: 'Stubbed server error' }),
-      });
+      await route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(responseBody) });
     });
 
     return captured;

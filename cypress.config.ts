@@ -9,7 +9,8 @@ import { defineConfig } from 'cypress';
 
 export default defineConfig({
   e2e: {
-    baseUrl: process.env.BASE_URL ?? 'https://ampvendingmachines.com', // TODO(verify)
+    // www: the domain without www 301-redirects, which would slow every visit.
+    baseUrl: process.env.BASE_URL ?? 'https://www.ampvendingmachines.com',
     specPattern: 'cypress/e2e/**/*.cy.ts',
     supportFile: 'cypress/support/e2e.ts',
     // Videos slow every run and bloat CI artifacts. Failure screenshots are still on by default.
