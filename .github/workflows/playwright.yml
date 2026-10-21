@@ -1,27 +1,42 @@
+# Runs the Playwright suite against the live site.
+# Action versions checked 2026-10-21: each @v7 is the latest major and runs on Node 24
+# (the Node 20 versions trigger GitHub's deprecation warning).
 name: Playwright Tests
+
 on:
   push:
-    branches: [ main, master ]
+    branches: [main]
   pull_request:
-    branches: [ main, master ]
+    branches: [main]
+  # Adds a "Run workflow" button in the Actions tab.
+  workflow_dispatch:
+  # Daily regression run against production (13:00 UTC = 6 AM Pacific), so a site
+  # change that breaks the contact form is caught even if nobody pushes here.
+  schedule:
+    - cron: '0 13 * * *'
+
 jobs:
   test:
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Pinned: ubuntu-latest moved to Ubuntu 26 on 2026-10-19, and Playwright's
+    # --with-deps install can lag behind a brand-new OS image.
+    runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with:
-        node-version: lts/*
-    - name: Install dependencies
-      run: npm ci
-    - name: Install Playwright Browsers
-      run: npx playwright install --with-deps
-    - name: Run Playwright tests
-      run: npx playwright test
-    - uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
-      with:
-        name: playwright-report
-        path: playwright-report/
-        retention-days: 30
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+      - name: Run Playwright tests
+        run: npx playwright test
+      # Upload the HTML report (with traces and axe results) even when tests fail.
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30

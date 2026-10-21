@@ -190,7 +190,12 @@ test.describe('Contact form', () => {
 
   test('TC-A11Y-001 no WCAG 2.1 A/AA violations beyond the logged ones @smoke', async ({
     page,
+    contactPage,
   }, testInfo) => {
+    // Scan the page as visitors see it once it has finished animating in. Mid-fade
+    // text is semi-transparent and fails contrast for the wrong reason.
+    await contactPage.waitForAnimationsToSettle();
+
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
       .analyze();

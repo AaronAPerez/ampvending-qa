@@ -96,9 +96,21 @@ export class ContactPage {
   // Actions
   // ---------------------------------------------------------------------------
 
-  /** Open the contact page. */
+  /** Open the contact page and wait until it's interactive. */
   visit(): void {
     cy.visit(CONTACT_PATH);
+    this.waitForHydration();
+  }
+
+  /**
+   * Wait until React has hydrated the form (event handlers attached). Same check and
+   * reasoning as waitForHydration() in pages/ContactPage.ts (Playwright).
+   */
+  waitForHydration(): void {
+    cy.get('main button[type="submit"]', { timeout: 15_000 }).should(($button) => {
+      const hydrated = Object.keys($button[0]).some((key) => key.startsWith('__reactProps'));
+      expect(hydrated, 'React has hydrated the form').to.equal(true);
+    });
   }
 
   /** Fill only the fields provided. Skipped fields stay empty (used by required-field tests). */

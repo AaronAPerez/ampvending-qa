@@ -73,6 +73,41 @@ export class ContactPage {
   }
 
   /**
+   * Wait until entrance animations have finished.
+   *
+   * WHY: the site fades content in with framer-motion (opacity 0 -> 1, staggered).
+   * Mid-fade, text is partly transparent, and axe measures that as a contrast failure.
+   * CI hit this in Firefox: different FAQ cards were flagged on each attempt, even
+   * though their final colors pass easily.
+   *
+   * HOW: framer-motion animates through inline `style="opacity: ..."`. Wait until no
+   * element in <main> sits between 0 and 1, and stays that way for 500 ms, which covers
+   * the gaps between staggered items. Elements still at 0 (not animated in yet) are
+   * ignored: axe skips invisible elements too. Tailwind opacity utilities are classes,
+   * not inline styles, so intentional design opacity doesn't block this.
+   */
+  async waitForAnimationsToSettle(): Promise<void> {
+    await this.page.waitForFunction(
+      () => {
+        const animating = Array.from(document.querySelectorAll<HTMLElement>('main *')).some((el) => {
+          if (el.style.opacity === '') return false;
+          const opacity = Number(el.style.opacity);
+          return opacity > 0 && opacity < 1;
+        });
+        const state = window as unknown as { __qaSettledAt?: number };
+        if (animating) {
+          state.__qaSettledAt = undefined;
+          return false;
+        }
+        state.__qaSettledAt ??= performance.now();
+        return performance.now() - state.__qaSettledAt >= 500;
+      },
+      undefined,
+      { timeout: 10_000, polling: 100 },
+    );
+  }
+
+  /**
    * A field-level error, found by its text inside <main>. Deliberately NOT by role:
    * the site may drop role="alert" from field errors (they should be announced via
    * focus + aria-describedby instead), and this locator keeps working either way.
@@ -81,9 +116,34 @@ export class ContactPage {
     return this.main.getByText(text);
   }
 
-  /** Open the contact page. */
+  /** Open the contact page and wait until it's interactive. */
   async goto(): Promise<void> {
     await this.page.goto(ContactPage.path);
+    await this.waitForHydration();
+  }
+
+  /**
+   * Wait until React has hydrated the form, meaning its event handlers are attached.
+   *
+   * WHY: the server sends finished-looking HTML before the JavaScript runs. Typing or
+   * clicking before hydration either loses the typed values or triggers the browser's
+   * native form submit, which reloads the page. Slower engines hit that window most,
+   * which showed up in CI as flaky WebKit "success message not found" failures.
+   *
+   * HOW: React stores its props on hydrated DOM nodes under a key starting with
+   * "__reactProps". That's a React internal, but it has been stable for years and it's
+   * the only reliable signal without changing the site. If the site ever adds an
+   * explicit marker (e.g. data-hydrated="true"), wait for that instead.
+   */
+  async waitForHydration(): Promise<void> {
+    await this.page.waitForFunction(
+      () => {
+        const button = document.querySelector('main button[type="submit"]');
+        return button !== null && Object.keys(button).some((key) => key.startsWith('__reactProps'));
+      },
+      undefined,
+      { timeout: 15_000 },
+    );
   }
 
   /** Fill only the fields provided. Skipped fields stay empty (used by required-field tests). */
