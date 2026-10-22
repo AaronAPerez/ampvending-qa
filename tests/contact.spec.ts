@@ -10,7 +10,7 @@
  * Tests that document a confirmed defect use test.fail(). They stay green while the
  * bug exists and turn red ("unexpectedly passed") once it's fixed, which is the cue
  * to delete the test.fail() line. Each description starts with its ID from
- * docs/BUG_REPORTS.md; add the GitHub issue number once it's filed.
+ * docs/BUG_REPORTS.md and links its GitHub issue on the website repository.
  */
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from '../fixtures';
@@ -23,19 +23,22 @@ import {
   messageOfLength,
 } from '../shared/contact';
 
+/** Issue URL on the website repository, so a test failure links straight to its issue. */
+const issueUrl = (issue: number) =>
+  `https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/${issue}`;
+
 /**
  * Confirmed defects, referenced by the test.fail() calls below.
- * IDs match docs/BUG_REPORTS.md. Once an issue is filed, add its number,
- * e.g. 'BUG-001 (#12): ...', so a failing test points straight to it.
+ * IDs match docs/BUG_REPORTS.md; each links its filed GitHub issue.
  */
 const KNOWN_BUGS = {
   messageLength:
-    'BUG-001: the form only checks "not empty"; the server requires 10-1000 characters, ' +
-    'so the visitor gets a generic error instead of a field message',
-  serverErrors: "BUG-002: the form discards the server's validation message and shows a generic error",
-  messageErrorHidden: 'BUG-003: the form sets "Message is required" but never displays it',
+    `BUG-001 ${issueUrl(113)}: the form only checks "not empty"; the server requires ` +
+    '10-1000 characters, so the visitor gets a generic error instead of a field message',
+  serverErrors: `BUG-002 ${issueUrl(114)}: the form discards the server's validation message and shows a generic error`,
+  messageErrorHidden: `BUG-003 ${issueUrl(115)}: the form sets "Message is required" but never displays it`,
   focus:
-    'BUG-004: focus is not moved to the first invalid field ' +
+    `BUG-004 ${issueUrl(116)}: focus is not moved to the first invalid field ` +
     '(accessibility best practice, supports WCAG 3.3.1)',
 } as const;
 
@@ -46,8 +49,8 @@ const KNOWN_BUGS = {
  * found and the test fails with a reminder to delete it (same idea as test.fail()).
  */
 const KNOWN_A11Y_VIOLATIONS = [
-  { bug: 'BUG-005', rule: 'color-contrast', htmlContains: '>Get In Touch<' },
-  { bug: 'BUG-006', rule: 'label-content-name-mismatch', htmlContains: 'aria-label="Navigate to homepage"' },
+  { bug: 'BUG-005', issue: 117, rule: 'color-contrast', htmlContains: '>Get In Touch<' },
+  { bug: 'BUG-006', issue: 118, rule: 'label-content-name-mismatch', htmlContains: 'aria-label="Navigate to homepage"' },
 ] as const;
 
 /** Short timeout for assertions that are expected to fail, so known bugs don't slow the run. */
@@ -227,7 +230,11 @@ test.describe('Contact form', () => {
     // Fixed problems: a logged violation that's gone means its entry should be removed.
     const nowFixed = KNOWN_A11Y_VIOLATIONS.filter(
       (known) => !found.some((item) => matches(known, item)),
-    ).map((known) => `${known.bug} (${known.rule}) is fixed: remove it from KNOWN_A11Y_VIOLATIONS`);
+    ).map(
+      (known) =>
+        `${known.bug} (${known.rule}) is fixed: remove it from KNOWN_A11Y_VIOLATIONS ` +
+        `and close ${issueUrl(known.issue)}`,
+    );
     expect(nowFixed, 'Logged violations that no longer occur').toEqual([]);
   });
 });

@@ -1,5 +1,7 @@
 # ampvending-qa
 
+[![Playwright Tests](https://github.com/AaronAPerez/ampvending-qa/actions/workflows/playwright.yml/badge.svg)](https://github.com/AaronAPerez/ampvending-qa/actions/workflows/playwright.yml)
+
 QA automation for the **AMP Vending Machines** website (https://www.ampvendingmachines.com),
 a Next.js lead-generation site I built for a client. The contact form is how the business gets
 leads, so this suite concentrates on it: functional, negative, boundary, API-contract and
@@ -13,18 +15,18 @@ accessibility testing. It runs against **production without ever sending a real 
 | Playwright + TypeScript | 18 tests × 3 browsers (Chromium, Firefox, WebKit) |
 | Cypress + TypeScript | 8 tests, ported from the Playwright suite, same test data |
 | Defects found | 6, written up in [docs/BUG_REPORTS.md](docs/BUG_REPORTS.md) |
-| Latest run (Chromium) | 13 passing · 5 known bugs tracked as expected failures · 2 known accessibility violations tracked in the axe baseline |
+| Each browser | 13 checks pass · 5 known-bug tests fail as expected · the axe scan tolerates only the 2 logged violations |
 
 ## Defects found
 
-| ID | Defect | Severity | Caught by | Issue |
+| ID | Defect | Severity | Caught by | Issue (website repo) |
 |---|---|---|---|---|
-| BUG-001 | A short message passes the form, but the server rejects it and the visitor sees a generic error | S2 | TC-CF-004 | _#_ |
-| BUG-002 | The server's validation messages are discarded and replaced with a generic error | S3 | TC-CF-009 | _#_ |
-| BUG-003 | The "Message is required" error is never displayed | S2 | TC-CF-010 | _#_ |
-| BUG-004 | Focus isn't moved to the first invalid field after a failed submit | S3 | TC-A11Y-004 | _#_ |
-| BUG-005 | Text contrast below WCAG 1.4.3 AA ("Get In Touch" badge, 2.89:1) | S3 | TC-A11Y-001 | _#_ |
-| BUG-006 | The "Home" nav link's accessible name doesn't contain its visible text (WCAG 2.5.3) | S3 | TC-A11Y-001 | _#_ |
+| BUG-001 | A short message passes the form, but the server rejects it and the visitor sees a generic error | S2 | TC-CF-004 | [#113](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/113) |
+| BUG-002 | The server's validation messages are discarded and replaced with a generic error | S3 | TC-CF-009 | [#114](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/114) |
+| BUG-003 | The "Message is required" error is never displayed | S2 | TC-CF-010 | [#115](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/115) |
+| BUG-004 | Focus isn't moved to the first invalid field after a failed submit | S3 | TC-A11Y-004 | [#116](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/116) |
+| BUG-005 | Text contrast below WCAG 1.4.3 AA ("Get In Touch" badge, 2.89:1) | S3 | TC-A11Y-001 | [#117](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/117) |
+| BUG-006 | The "Home" nav link's accessible name doesn't contain its visible text (WCAG 2.5.3) | S3 | TC-A11Y-001 | [#118](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/118) |
 
 Severity definitions are in [TEST_PLAN.md §8](TEST_PLAN.md#8-defect-management).
 
@@ -53,7 +55,11 @@ logged one disappears, the test fails with a reminder to delete its entry.
   error handling can be tested safely.
 - **Accessibility scan.** axe-core checks WCAG 2.1 A/AA, and the full results are attached to
   the HTML report.
-- **CI.** GitHub Actions runs the Playwright suite on every push and publishes the HTML report.
+- **Stable by design.** Tests wait for React to hydrate before touching the form, and for
+  entrance animations to finish before the axe scan. That removed flaky WebKit failures and
+  false contrast failures in Firefox, without retries or fixed sleeps around the interactions.
+- **CI.** GitHub Actions runs all 3 browsers on every push and daily against production, and
+  uploads the HTML report with a trace of every failure.
 
 ## Safety: tests never send real leads
 Every test runs against the live site, so a stray form submission would email the business.
@@ -80,7 +86,8 @@ reserved values (`qa.test@example.com`, `209-555-0100`).
 npm ci
 npx playwright install
 
-npx playwright test                       # all browsers, against production
+npx playwright test --workers=2           # all browsers, against production
+                                          # (more workers can overload a laptop and cause timeouts)
 npx playwright test --grep "@smoke"       # fast must-pass subset
 npx playwright show-report                # HTML report, with traces and axe results
 

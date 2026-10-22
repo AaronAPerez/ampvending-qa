@@ -1,23 +1,25 @@
 # Bug reports: AMP Vending Machines website
 
 Found by the `ampvending-qa` suite and by reading the site's source.
-Each report is filed as a GitHub issue on the website repository: the heading is the issue
-title and the section is its body.
+Each report is filed as a GitHub issue on the
+[website repository](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues)
+(#113–#118); links are in the summary table.
 
 **Environment for all reports:** production, https://www.ampvendingmachines.com/contact ·
-Chromium via Playwright, cross-checked in Microsoft Edge (InPrivate) · Windows 11 · 2026-10-21.
+Playwright with Chromium, Firefox and WebKit, cross-checked in Microsoft Edge (InPrivate) ·
+Windows 11 and GitHub Actions (Ubuntu 24.04) · 2026-10-21.
 Severity and priority definitions: [TEST_PLAN.md §8](../TEST_PLAN.md#8-defect-management).
 
 ## Summary
 
 | ID | Defect | Severity | Priority | Test | Issue |
 |---|---|---|---|---|---|
-| [BUG-001](#bug-001-a-short-message-passes-the-form-then-the-server-rejects-it-with-a-generic-error) | Short message passes the form, then the server rejects it | S2 | P1 | TC-CF-004 | _not filed_ |
-| [BUG-002](#bug-002-the-servers-validation-messages-are-discarded) | Server validation messages are discarded | S3 | P2 | TC-CF-009 | _not filed_ |
-| [BUG-003](#bug-003-message-is-required-is-never-displayed) | "Message is required" is never displayed | S2 | P1 | TC-CF-010 | _not filed_ |
-| [BUG-004](#bug-004-focus-isnt-moved-to-the-first-invalid-field) | Focus isn't moved to the first invalid field | S3 | P2 | TC-A11Y-004 | _not filed_ |
-| [BUG-005](#bug-005-text-contrast-below-wcag-aa-on-the-get-in-touch-badge) | Text contrast below WCAG AA | S3 | P2 | TC-A11Y-001 | _not filed_ |
-| [BUG-006](#bug-006-the-home-nav-links-accessible-name-doesnt-contain-its-visible-text) | The "Home" nav link's accessible name doesn't contain its visible text | S3 | P2 | TC-A11Y-001 | _not filed_ |
+| [BUG-001](#bug-001-a-short-message-passes-the-form-then-the-server-rejects-it-with-a-generic-error) | Short message passes the form, then the server rejects it | S2 | P1 | TC-CF-004 | [#113](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/113) |
+| [BUG-002](#bug-002-the-servers-validation-messages-are-discarded) | Server validation messages are discarded | S3 | P2 | TC-CF-009 | [#114](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/114) |
+| [BUG-003](#bug-003-message-is-required-is-never-displayed) | "Message is required" is never displayed | S2 | P1 | TC-CF-010 | [#115](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/115) |
+| [BUG-004](#bug-004-focus-isnt-moved-to-the-first-invalid-field) | Focus isn't moved to the first invalid field | S3 | P2 | TC-A11Y-004 | [#116](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/116) |
+| [BUG-005](#bug-005-text-contrast-below-wcag-aa-on-the-get-in-touch-badge) | Text contrast below WCAG AA | S3 | P2 | TC-A11Y-001 | [#117](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/117) |
+| [BUG-006](#bug-006-the-home-nav-links-accessible-name-doesnt-contain-its-visible-text) | The "Home" nav link's accessible name doesn't contain its visible text | S3 | P2 | TC-A11Y-001 | [#118](https://github.com/AaronAPerez/AMP-Vending-Machines-Website/issues/118) |
 
 ---
 
@@ -36,7 +38,7 @@ no request sent.
 - The form sends the request (verified by TC-CF-004).
 - The API rejects it with HTTP 400, per `app/api/contact/route.ts`.
 - The visitor sees only "Sorry, there was an error sending your message. Please try again or
-  contact us directly." (see BUG-002).
+  contact us directly." (see [BUG-002](#bug-002-the-servers-validation-messages-are-discarded)).
 
 **Root cause:** three different rule sets.
 - `validateForm()` in `components/contact/ContactForm.tsx` only checks that the message isn't empty.
@@ -113,7 +115,8 @@ shows a toast and returns without moving focus.
 (`app/contact/ContactPageClient.tsx`: `bg-[#FD5A1E] text-[#F5F5F5] text-sm`).
 
 **Measured by axe:** text `#F5F5F5` on background `#FD5A1E`, **2.89:1**, at 14px normal weight.
-Text this size needs **4.5:1**. This badge is the only element on the page that fails contrast.
+Text this size needs **4.5:1**. Once the page's entrance animations finish, this badge is the
+only element that fails contrast, in all 3 browsers.
 
 **Suggested fix (design decision):**
 - **Option A:** black text on the brand orange, **6.7:1**. This is what the site's primary
